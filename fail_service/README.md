@@ -40,6 +40,7 @@ Usage of ./fail_service:
   -healthy-in=0: Number of seconds the health end-point will start returning a 200. A -1 will result in the service NEVER getting healthy.
   -p=8080: The port where the application instance listens to. Defaults to 8080.
   -unhealthy-for=0: Number of seconds the health end-point will keep returning a !200. A -1 will result in the service staying unhealthy forever.
+  -oom-after=0: Number of seconds before the service starts to amass memory
 ```
 
 ### Examples
@@ -90,4 +91,7 @@ curl -X PUT localhost:8080/sethealthy
 
 # Set the service unhealthy
 curl -X PUT localhost:8080/setunhealthy
+
+# Force OutOfMemory
+curl -X PUT localhost:8080/oomkill
 ```

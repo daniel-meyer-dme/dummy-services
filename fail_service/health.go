@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"math/rand"
 	"net/http"
 	"time"
 )
@@ -15,11 +16,12 @@ type FailService interface {
 	HealthEndpointHandler(w http.ResponseWriter, r *http.Request)
 	SetHealthyEndpointHandler(w http.ResponseWriter, r *http.Request)
 	SetUnHealthyEndpointHandler(w http.ResponseWriter, r *http.Request)
+	OomKillEndpointHandler(w http.ResponseWriter, r *http.Request)
 	Start()
 	Stop()
 }
 
-var errorResponseWrongMethod = []byte("{ \"error\": \"Invalid mehtod used. You have to use the PUT mehtod.\" }")
+var errorResponseWrongMethod = []byte("{ \"error\": \"Invalid method used. You have to use the PUT method.\" }")
 
 type healthResponse struct {
 	Message string `json:"message"`
@@ -35,6 +37,7 @@ type failServiceImpl struct {
 	changeStateAt         int64
 	wasHealthyOnce        bool
 	overwrittenByEndpoint bool
+	oomAfter              int64
 }
 
 func validateHTTPMethod(w http.ResponseWriter, r *http.Request) bool {
@@ -64,6 +67,55 @@ func (fs *failServiceImpl) SetUnHealthyEndpointHandler(w http.ResponseWriter, r 
 		fs.overwrittenByEndpoint = true
 		fs.healthy = false
 	}
+}
+
+func (fs *failServiceImpl) OomKillEndpointHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("OomKillEndpointHeader called")
+
+	if validateHTTPMethod(w, r) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Force OOM Now"))
+		forceOomKill()
+	}
+}
+
+func forceOomKill() {
+	massiveMemory := make(map[string]string)
+
+	for {
+		massiveMemory[RandStringBytesMaskImprSrc(128)] = RandStringBytesMaskImprSrc(128)
+
+	}
+	log.Print(massiveMemory)
+}
+
+var src = rand.NewSource(time.Now().UnixNano())
+
+const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+const (
+	letterIdxBits = 6                    // 6 bits to represent a letter index
+	letterIdxMask = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
+	letterIdxMax  = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
+)
+
+//RandStringBytesMaskImprSrc - generate random string using masking with source
+func RandStringBytesMaskImprSrc(n int) string {
+	b := make([]byte, n)
+	l := len(letterBytes)
+	// A src.Int63() generates 63 random bits, enough for letterIdxMax characters!
+	for i, cache, remain := n-1, src.Int63(), letterIdxMax; i >= 0; {
+		if remain == 0 {
+			cache, remain = src.Int63(), letterIdxMax
+		}
+		if idx := int(cache & letterIdxMask); idx < l {
+			b[i] = letterBytes[idx]
+			i--
+		}
+		cache >>= letterIdxBits
+		remain--
+	}
+
+	return string(b)
 }
 
 func (fs *failServiceImpl) HealthEndpointHandler(w http.ResponseWriter, r *http.Request) {
@@ -107,6 +159,23 @@ func (fs *failServiceImpl) Start() {
 	fs.changeStateAt = fs.nextEvalStateChange(currentTime)
 
 	fs.ticker = time.NewTicker(time.Millisecond * 1000)
+
+	if fs.oomAfter > 0 {
+		go func() {
+			duration := time.Duration(time.Second * time.Duration(fs.oomAfter))
+			ticker := time.NewTicker(duration)
+			log.Printf("Going oom in %s", duration)
+			for {
+
+				select {
+				case <-ticker.C:
+					log.Print("Going oom")
+					ticker.Stop()
+					forceOomKill()
+				}
+			}
+		}()
+	}
 	go func() {
 		for range fs.ticker.C {
 
@@ -168,7 +237,7 @@ func (fs *failServiceImpl) nextEvalStateChange(currentTime int64) int64 {
 }
 
 // NewFailService creates a new instance of a FailService implementation
-func NewFailService(healthyIn int64, healthyFor int64, unHealthyFor int64) FailService {
+func NewFailService(healthyIn int64, healthyFor int64, unHealthyFor int64, oomAfter int64) FailService {
 
 	healthy := false
 	// immediately start healthy
@@ -180,6 +249,7 @@ func NewFailService(healthyIn int64, healthyFor int64, unHealthyFor int64) FailS
 		healthyIn:             healthyIn,
 		healthyFor:            healthyFor,
 		unHealthyFor:          unHealthyFor,
+		oomAfter:              oomAfter,
 		healthy:               healthy,
 		wasHealthyOnce:        healthy,
 		changeStateAt:         0,

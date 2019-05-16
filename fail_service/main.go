@@ -14,6 +14,7 @@ func main() {
 	var healthyFor = flag.Int("healthy-for", 0, "Number of seconds the health end-point will return a 200. A -1 will result in the service staying healthy forever (prio 1, if multiple flags are -1).")
 	var healthyIn = flag.Int("healthy-in", 0, "Number of seconds the health end-point will start returning a 200. A -1 will result in the service NEVER getting healthy (prio 2, if multiple flags are -1).")
 	var unhealthyFor = flag.Int("unhealthy-for", 0, "Number of seconds the health end-point will keep returning a !200. A -1 will result in the service staying unhealthy forever (prio 3, if multiple flags are -1).")
+	var oomkillAfter = flag.Int("oom-after", 0, "Number of seconds before the service starts to amass memory to finally get OOMKilled")
 	flag.Parse()
 
 	healthyForConverted := *healthyFor
@@ -41,11 +42,13 @@ func main() {
 	log.Printf("\thealthyIn: %s", healthyInStr)
 	log.Printf("\thealthyFor: %s", healthyForStr)
 	log.Printf("\tunhealthyFor: %s", unhealthyForStr)
+	log.Printf("\toom-after: %v", *oomkillAfter)
 
-	failService := NewFailService(int64(healthyInConverted), int64(healthyForConverted), int64(unhealthyForConverted))
+	failService := NewFailService(int64(healthyInConverted), int64(healthyForConverted), int64(unhealthyForConverted), int64(*oomkillAfter))
 	http.HandleFunc("/health", failService.HealthEndpointHandler)
 	http.HandleFunc("/sethealthy", failService.SetHealthyEndpointHandler)
 	http.HandleFunc("/setunhealthy", failService.SetUnHealthyEndpointHandler)
+	http.HandleFunc("/oomkill", failService.OomKillEndpointHandler)
 	failService.Start()
 
 	//start the web server
