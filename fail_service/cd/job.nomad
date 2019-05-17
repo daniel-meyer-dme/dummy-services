@@ -22,7 +22,7 @@ job "fail-service" {
   }
 
   group "fail-service" {
-
+    count=1
     # https://www.nomadproject.io/docs/job-specification/restart.html
     restart {
       interval = "5m"
@@ -69,7 +69,7 @@ job "fail-service" {
       }
 
       resources {
-        cpu    = 100 # MHz
+        cpu    = 120 # MHz
         memory = 256 # MB
         network {
           mbits = 10
